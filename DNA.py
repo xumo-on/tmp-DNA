@@ -3,46 +3,35 @@ DNA
 """
 from ontology.interop.Ontology.Contract import Migrate
 from ontology.interop.System.Storage import GetContext, Get, Put, Delete
-from ontology.interop.System.Runtime import CheckWitness, GetTime, Notify, Serialize, Deserialize
-from ontology.interop.System.ExecutionEngine import GetExecutingScriptHash, GetScriptContainer
-from ontology.interop.Ontology.Native import Invoke
-from ontology.interop.Ontology.Runtime import GetCurrentBlockHash, Base58ToAddress
-from ontology.builtins import concat, state, sha256, Exception, len, append, remove, abs
-from ontology.interop.System.Transaction import GetTransactionHash
+from ontology.interop.System.Runtime import CheckWitness, Notify, Serialize, Deserialize
+from ontology.interop.Ontology.Runtime import Base58ToAddress
+from ontology.builtins import concat, Exception, len, append, remove
 
 
 Owner = Base58ToAddress('ASwaf8mj2E3X18MHvcJtXoDsMqUjJswRWS')
-ContractAddress = GetExecutingScriptHash()
 context = GetContext()
-TypeMagnitude = 100000000000000
-GradeMagnitude = 1000000000000
-NameMagnitude = 1000000000
-SequenceNumMagnitude = 1000
 
 
 PLAYER_ADDRESS_PRE_KEY = "P1"
 ADMIN_ADDRESS_KEY = "P2"
 DNA_PRE_KEY = "P3"
+INIIT_KEY = "P4"
 
 
 def Main(operation, args):
+    ########## for Owner to invoke Begin ##########
+    if operation == "init":
+        return init()
     if operation == "addAdmin":
+        Require(len(args) == 1)
         Account = args[0]
         return addAdmin(Account)
-    if operation == "createProperty":
-        createList = args[0]
-        return createProperty(createList)
-    if operation == "transferProperty":
-        transferList = args[0]
-        return transferProperty(transferList)
-    if operation == "removeProperty":
-        removeList = args[0]
-        return removeProperty(removeList)
-    if operation == "getPlayerAllDNA":
-        account = args[0]
-        return getPlayerAllDNA(account)
+    if operation == "removeAdmin":
+        Require(len(args) == 1)
+        Account = args[0]
+        return removeAdmin(Account)
     if operation == "migrateContract":
-        Require(len(args) == 8)
+        Require(len(args) == 7)
         code = args[0]
         needStorage = args[1]
         name = args[2]
@@ -51,28 +40,128 @@ def Main(operation, args):
         email = args[5]
         description = args[6]
         return migrateContract(code, needStorage, name, version, author, email, description)
+    ########## for Owner to invoke End ##########
+
+    ########## for Owner and Admin to invoke Begin ##########
+    if operation == "createProperty":
+        Require(len(args) == 2)
+        Account = args[0]
+        createList = args[1]
+        return createProperty(Account, createList)
+    ########## for Owner and Admin to invoke End ##########
+
+    ########## for Everyone to invoke Begin ##########
+    if operation == "transferProperty":
+        Require(len(args) == 1)
+        transferList = args[0]
+        return transferProperty(transferList)
+    if operation == "removeProperty":
+        Require(len(args) == 1)
+        removeList = args[0]
+        return removeProperty(removeList)
+    if operation == "getPlayerAllDNA":
+        Require(len(args) == 1)
+        Account = args[0]
+        return getPlayerAllDNA(Account)
+    if operation == "getPlayerDNAFromRange":
+        Require(len(args) == 3)
+        Account = args[0]
+        fromNum = args[1]
+        toNum = args[2]
+        return getPlayerDNAFromRange(Account, fromNum, toNum)
+    if operation == "getPlayerDNANum":
+        Require(len(args) == 1)
+        Account = args[0]
+        return getPlayerDNANum(Account)
+    ########## for Everyone to invoke End ##########
+
+
+########## Methods that only Owner can invoke Start ##########
+def init():
+    """
+    only owner can init
+    please init before use any function
+    :return: bool
+    """
+    RequireWitness(Owner)
+    inited = Get(GetContext(), INIIT_KEY)
+    if inited:
+        Notify(["Already inited"])
+        return False
+    else:
+        Put(context, concatKey(ADMIN_ADDRESS_KEY, Owner), 1)
+        Put(context, INIIT_KEY, 1)
+        Notify(["Init successfully"])
+    return True
 
 
 def addAdmin(Account):
     """
+    only owner can add admin
     :param Account: new admin's address
-    :return:
-    """
-    RequireWitness(Owner)
-    adminList = Get(context, ADMIN_ADDRESS_KEY)
-    adminList = Deserialize(adminList)
-    adminList.append(Account)
-    Put(context, ADMIN_ADDRESS_KEY, Serialize(adminList))
-    Notify(["Now admin address is", adminList])
-    return True
-
-
-def createProperty(createList):
-    """
-    :param createList: [[account1, DNA1],[account2, DNA2]]
     :return: bool
     """
     RequireWitness(Owner)
+    Require(Get(context, concatKey(ADMIN_ADDRESS_KEY, Account)) == 0)
+    Put(context, concatKey(ADMIN_ADDRESS_KEY, Account), 1)
+    Notify(["Add admin", Account])
+    return True
+
+
+def removeAdmin(Account):
+    """
+    only owner can remove admin
+    cannot remove owner
+    :param Account: admin's account
+    :return: bool
+    """
+    RequireWitness(Owner)
+    Require(Account != Owner)
+    Require(Get(context, concatKey(ADMIN_ADDRESS_KEY, Account)) == 1)
+    Delete(context, concatKey(ADMIN_ADDRESS_KEY, Account))
+    Notify(["Remove admin", Account])
+    return True
+
+
+def migrateContract(code, needStorage, name, version, author, email, description):
+    """
+    only Owner can migrate contract
+    can migrate this contract to a new contract
+    the code is new contract's AVM code
+    old contract's all data will transfer to new contract
+    :param code: new contract code
+    :param needStorage: 1
+    :param name: ""
+    :param version: ""
+    :param author: ""
+    :param email: ""
+    :param description: ""
+    :return: bool
+    """
+    RequireWitness(Owner)
+    res = Migrate(code, needStorage, name, version, author, email, description)
+    Require(res)
+    Notify(["Migrate Contract successfully"])
+    return True
+########## Methods that only Owner can invoke End ##########
+
+
+########## Methods that only Owner and Admin can invoke Start ##########
+def createProperty(Account, createList):
+    """
+    only contract owner or admin can create property
+    cannot create more than 1000 property once
+    :param createList: [Account, [[account1, DNA1],[account2, DNA2]]]
+    :return: bool
+    """
+    Require(Get(context, concatKey(ADMIN_ADDRESS_KEY, Account)) == 1)
+    RequireWitness(Account)
+    DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, createList[0][0]))
+    if not DNAlist:
+        DNAlist = []
+    else:
+        DNAlist = Deserialize(DNAlist)
+    Require(len(createList) <= 1000)
     for createE in createList:
         account = createE[0]
         DNA = createE[1]
@@ -81,25 +170,24 @@ def createProperty(createList):
         Require(DNA > 100000000000000)
         Require(DNA < 1000000000000000)
         Require(not accountCheck)
-        DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account))
-        if not DNAlist:
-            DNAlist = []
-        else:
-            DNAlist = Deserialize(DNAlist)
         DNAlist.append(DNA)
         Put(context, concatKey(DNA_PRE_KEY, DNA), account)
         Put(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account), Serialize(DNAlist))
     Notify(["Create property successfully."])
     return True
+########## Methods that only Owner and Admin can invoke End ##########
 
 
+########## Methods that Evetyone can invoke Start ##########
 def transferProperty(transferList):
     """
+    one account can transfer many DNA to different other accounts
     :param transferList: [[toAccount1, DNA1],[toAccount2, DNA2]]
     :return: bool
     """
     DNACheck = transferList[0][1]
     account = Get(context, concatKey(DNA_PRE_KEY, DNACheck))
+    RequireScriptHash(account)
     RequireWitness(account)
 
     for transferE in transferList:
@@ -135,39 +223,95 @@ def removeProperty(removeList):
     """
     DNACheck = removeList[0]
     account = Get(context, concatKey(DNA_PRE_KEY, DNACheck))
+    RequireScriptHash(account)
     RequireWitness(account)
 
-    for DNA in removeList:
-        DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account))
-        DNAlist = Deserialize(DNAlist)
+    DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account))
 
-        num = 0
-        while num < len(DNAlist):
-            if DNAlist[num] == DNA:
-                Delete(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account))
-                Delete(context, concatKey(DNA_PRE_KEY, DNA))
-                DNAlist.remove(num)
-                Put(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account), Serialize(DNAlist))
-            num += 1
+    if DNAlist:
+        DNAlist = Deserialize(DNAlist)
+    else:
+        raise Exception("NO DNA")
+    removeListLen = len(removeList)
+    removeListIndex = 0
+
+    while removeListIndex < removeListLen:
+        DNAListIndex = 0
+        DNA = removeList[removeListIndex]
+        findInList = _findInList(DNA, DNAlist)
+        if findInList >= 0:
+            Delete(context, concatKey(DNA_PRE_KEY, DNA))
+            DNAlist.remove(DNAListIndex)
+        else:
+            raise Exception("Not found DNA to be removed")
+        removeListIndex += 1
+    Put(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account), Serialize(DNAlist))
     Notify(["Remove property successfully"])
     return True
 
 
-def getPlayerAllDNA(account):
-    DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account))
+def _findInList(DNA, DNAlist):
+    DNAListIndex = 0
+    DNAListLen = len(DNAlist)
+    while DNAListIndex < DNAListLen:
+        if DNA == DNAlist[DNAListIndex]:
+            return DNAListIndex
+        DNAListIndex += 1
+    return -1
+
+
+def getPlayerAllDNA(Account):
+    """
+    get player's all DNA
+    if this function cannot use because player's DNA too much
+    can use getPlayerDNANum and getPlayerDNAFromRange to get DNA
+    :param Account: player's account
+    :return: [DNA1, DNA2, DNA3]
+    """
+    DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, Account))
     DNAlist = Deserialize(DNAlist)
     return DNAlist
 
 
-def migrateContract(code, needStorage, name, version, author, email, description):
-    RequireWitness(Owner)
-    res = Migrate(code, needStorage, name, version, author, email, description)
-    Require(res)
-    Notify(["Migrate Contract successfully"])
-    return True
+def getPlayerDNAFromRange(Account, fromNum, toNum):
+    """
+    get player's DNA list from fromNum to toNum
+    toNum - fromNum must < 1000
+    can only get 1000 at most once
+    paramExample: [Account, fromNum, toNum]
+    :param Account: player's account
+    :param fromNum: int
+    :param toNum: int
+    :return: [DNA1, DNA2, DNA3]
+    """
+    Require(Sub(toNum, fromNum) < 1000)
+    DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, Account))
+    DNAlist = Deserialize(DNAlist)
+    Require(Sub(toNum, fromNum) < len(DNAlist))
+
+    tmpList = []
+    while fromNum <= toNum:
+        tmpList.append(DNAlist[Sub(fromNum, 1)])
+        fromNum += 1
+    return tmpList
 
 
-def concatKey(str1,str2):
+def getPlayerDNANum(Account):
+    """
+    get one account's DNA number
+    :param Account: player's account
+    :return: int
+    """
+    DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, Account))
+    DNAlist = Deserialize(DNAlist)
+    return len(DNAlist)
+
+
+########## Methods that Evetyone can invoke End ##########
+
+
+######################### Utility Methods Start #########################
+def concatKey(str1, str2):
     """
     connect str1 and str2 together as a key
     :param str1: string1
@@ -303,3 +447,4 @@ def Sqrt(a):
         b = c
         c = Div(Add(Div(a, c), c), 2)
     return c
+######################### Utility Methods End #########################
