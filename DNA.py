@@ -167,8 +167,8 @@ def createProperty(Account, createList):
         DNA = createE[1]
         accountCheck = Get(context, concatKey(DNA_PRE_KEY, DNA))
         Require(len(account) == 20)
-        Require(DNA > 100000000000000)
-        Require(DNA < 1000000000000000)
+        Require(DNA > 1000000000000000)
+        Require(DNA < 10000000000000000)
         Require(not accountCheck)
         DNAlist.append(DNA)
         Put(context, concatKey(DNA_PRE_KEY, DNA), account)
