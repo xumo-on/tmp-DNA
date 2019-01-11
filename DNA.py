@@ -130,7 +130,7 @@ def migrateContract(code, needStorage, name, version, author, email, description
     the code is new contract's AVM code
     old contract's all data will transfer to new contract
     :param code: new contract code
-    :param needStorage: 1
+    :param needStorage: True
     :param name: ""
     :param version: ""
     :param author: ""
@@ -166,10 +166,29 @@ def createProperty(Account, createList):
         account = createE[0]
         DNA = createE[1]
         accountCheck = Get(context, concatKey(DNA_PRE_KEY, DNA))
+
         Require(len(account) == 20)
-        Require(DNA > 1000000000000000)
+        # check len
+        Require(DNA >= 100000000000000)
         Require(DNA < 10000000000000000)
+        # check kind
+        Require(DNA / 100000000000000 % 100 > 0)
+        Require(DNA / 100000000000000 % 100 < 100)
+        # check grade
+        Require(DNA / 1000000000000 % 100 > 0)
+        Require(DNA / 1000000000000 % 100 < 100)
+        # check name
+        Require(DNA / 1000000000 % 1000 > 0)
+        Require(DNA / 1000000000 % 1000 < 1000)
+        # check number
+        Require(DNA / 1000 % 1000000 > 0)
+        Require(DNA / 1000 % 1000000 < 1000000)
+        # check random
+        Require(DNA / 1 % 1000 >= 0)
+        Require(DNA / 1 % 1000 < 1000)
+        # check DNA
         Require(not accountCheck)
+
         DNAlist.append(DNA)
         Put(context, concatKey(DNA_PRE_KEY, DNA), account)
         Put(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account), Serialize(DNAlist))
@@ -189,29 +208,31 @@ def transferProperty(transferList):
     account = Get(context, concatKey(DNA_PRE_KEY, DNACheck))
     RequireScriptHash(account)
     RequireWitness(account)
+    DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account))
+    DNAlist = Deserialize(DNAlist)
 
-    for transferE in transferList:
-        toAccount = transferE[0]
-        DNA = transferE[1]
-
-        DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account))
-        DNAlist = Deserialize(DNAlist)
+    transferListLen = len(transferList)
+    transferListIndex = 0
+    while transferListIndex < transferListLen:
+        toAccount = transferList[transferListIndex][0]
+        DNA = transferList[transferListIndex][1]
 
         toDNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, toAccount))
         if not toDNAlist:
             toDNAlist = []
         else:
-            toDNAlist = Deserialize(DNAlist)
+            toDNAlist = Deserialize(toDNAlist)
 
-        num = 0
-        while num < len(DNAlist):
-            if DNAlist[num] == DNA:
-                Put(context, concatKey(DNA_PRE_KEY, DNA), toAccount)
-                DNAlist.remove(num)
-                toDNAlist.append(DNA)
-                Put(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account), Serialize(DNAlist))
-                Put(context, concatKey(PLAYER_ADDRESS_PRE_KEY, toAccount), Serialize(toDNAlist))
-            num += 1
+        findInList = _findInList(DNA, DNAlist)
+        if findInList >= 0:
+            Put(context, concatKey(DNA_PRE_KEY, DNA), toAccount)
+            toDNAlist.append(DNA)
+            DNAlist.remove(findInList)
+        else:
+            raise Exception("Not found DNA to be removed")
+        transferListIndex += 1
+    Put(context, concatKey(PLAYER_ADDRESS_PRE_KEY, account), Serialize(DNAlist))
+    Put(context, concatKey(PLAYER_ADDRESS_PRE_KEY, toAccount), Serialize(toDNAlist))
     Notify(["Transfer property successfully"])
     return True
 
@@ -236,12 +257,11 @@ def removeProperty(removeList):
     removeListIndex = 0
 
     while removeListIndex < removeListLen:
-        DNAListIndex = 0
         DNA = removeList[removeListIndex]
         findInList = _findInList(DNA, DNAlist)
         if findInList >= 0:
             Delete(context, concatKey(DNA_PRE_KEY, DNA))
-            DNAlist.remove(DNAListIndex)
+            DNAlist.remove(findInList)
         else:
             raise Exception("Not found DNA to be removed")
         removeListIndex += 1
