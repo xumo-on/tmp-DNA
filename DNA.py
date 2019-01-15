@@ -172,20 +172,20 @@ def createProperty(Account, createList):
         Require(DNA >= 100000000000000)
         Require(DNA < 10000000000000000)
         # check kind
-        Require(DNA / 100000000000000 % 100 > 0)
-        Require(DNA / 100000000000000 % 100 < 100)
+        Require(Div(DNA, 100000000000000) % 100 > 0)
+        Require(Div(DNA, 100000000000000) % 100 < 100)
         # check grade
-        Require(DNA / 1000000000000 % 100 > 0)
-        Require(DNA / 1000000000000 % 100 < 100)
+        Require(Div(DNA, 1000000000000) % 100 > 0)
+        Require(Div(DNA, 1000000000000) % 100 < 100)
         # check name
-        Require(DNA / 1000000000 % 1000 > 0)
-        Require(DNA / 1000000000 % 1000 < 1000)
+        Require(Div(DNA, 1000000000) % 1000 > 0)
+        Require(Div(DNA, 1000000000) % 1000 < 1000)
         # check number
-        Require(DNA / 1000 % 1000000 > 0)
-        Require(DNA / 1000 % 1000000 < 1000000)
+        Require(Div(DNA, 1000) % 1000000 > 0)
+        Require(Div(DNA, 1000) % 1000000 < 1000000)
         # check random
-        Require(DNA / 1 % 1000 >= 0)
-        Require(DNA / 1 % 1000 < 1000)
+        Require(DNA % 1000 >= 0)
+        Require(DNA % 1000 < 1000)
         # check DNA
         Require(not accountCheck)
 
@@ -289,7 +289,10 @@ def getPlayerAllDNA(Account):
     :return: [DNA1, DNA2, DNA3]
     """
     DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, Account))
-    DNAlist = Deserialize(DNAlist)
+    if not DNAlist:
+        DNAlist = []
+    else:
+        DNAlist = Deserialize(DNAlist)
     return DNAlist
 
 
@@ -306,7 +309,10 @@ def getPlayerDNAFromRange(Account, fromNum, toNum):
     """
     Require(Sub(toNum, fromNum) < 1000)
     DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, Account))
-    DNAlist = Deserialize(DNAlist)
+    if DNAlist:
+        DNAlist = Deserialize(DNAlist)
+    else:
+        raise Exception("NO DNA")
     Require(Sub(toNum, fromNum) < len(DNAlist))
 
     tmpList = []
@@ -323,7 +329,10 @@ def getPlayerDNANum(Account):
     :return: int
     """
     DNAlist = Get(context, concatKey(PLAYER_ADDRESS_PRE_KEY, Account))
-    DNAlist = Deserialize(DNAlist)
+    if not DNAlist:
+        DNAlist = []
+    else:
+        DNAlist = Deserialize(DNAlist)
     return len(DNAlist)
 
 
@@ -388,14 +397,6 @@ def RequireWitness(witness):
 https://github.com/ONT-Avocados/python-template/blob/master/libs/SafeMath.py
 """
 
-def Add(a, b):
-    """
-    Adds two numbers, throws on overflow.
-    """
-    c = a + b
-    Require(c >= a)
-    return c
-
 def Sub(a, b):
     """
     Substracts two numbers, throws on overflow (i.e. if subtrahend is greater than minuend).
@@ -406,65 +407,11 @@ def Sub(a, b):
     Require(a>=b)
     return a-b
 
-def ASub(a, b):
-    if a > b:
-        return a - b
-    if a < b:
-        return b - a
-    else:
-        return 0
-
-def Mul(a, b):
-    """
-    Multiplies two numbers, throws on overflow.
-    :param a: operand a
-    :param b: operand b
-    :return: a - b if a - b > 0 or revert the transaction.
-    """
-    if a == 0:
-        return 0
-    c = a * b
-    Require(c / a == b)
-    return c
-
 def Div(a, b):
     """
     Integer division of two numbers, truncating the quotient.
     """
     Require(b > 0)
     c = a / b
-    return c
-
-def Pwr(a, b):
-    """
-    a to the power of b
-    :param a the base
-    :param b the power value
-    :return a^b
-    """
-    c = 0
-    if a == 0:
-        c = 0
-    elif b == 0:
-        c = 1
-    else:
-        i = 0
-        c = 1
-        while i < b:
-            c = Mul(c, a)
-            i = i + 1
-    return c
-
-def Sqrt(a):
-    """
-    Return sqrt of a
-    :param a:
-    :return: sqrt(a)
-    """
-    c = Div(Add(a, 1), 2)
-    b = a
-    while(c < b):
-        b = c
-        c = Div(Add(Div(a, c), c), 2)
     return c
 ######################### Utility Methods End #########################
